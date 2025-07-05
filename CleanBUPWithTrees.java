@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 public class CleanBUPWithTrees extends JFrame {
+    // Store bins selected for collection in the last optimization
+    private final List<Bin> selectedBins = new ArrayList<>();
 
     private static final int FLOORS = 5;
     private static final int BINS_PER_FLOOR = 3;
@@ -45,7 +47,18 @@ public class CleanBUPWithTrees extends JFrame {
     }
 
     private void initUI() {
-        JPanel inputPanel = new JPanel(new GridLayout(FLOORS, 1));
+        JPanel inputPanel = new JPanel(new GridLayout(FLOORS + 1, 1, 5, 5));
+        inputPanel.setBorder(BorderFactory.createTitledBorder("Bin Fill Levels"));
+
+        // Add a panel for global settings
+        JPanel settingsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        settingsPanel.setBorder(BorderFactory.createTitledBorder("Settings"));
+        JLabel thresholdLabel = new JLabel("Threshold: " + THRESHOLD + "%");
+        JLabel capacityLabel = new JLabel("Max bins/floor: " + CAPACITY_PER_FLOOR);
+        settingsPanel.add(thresholdLabel);
+        settingsPanel.add(Box.createHorizontalStrut(10));
+        settingsPanel.add(capacityLabel);
+        inputPanel.add(settingsPanel);
 
         for (int floor = 1; floor <= FLOORS; floor++) {
             JPanel floorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -53,7 +66,9 @@ public class CleanBUPWithTrees extends JFrame {
             for (int i = 0; i < BINS_PER_FLOOR; i++) {
                 Bin bin = bins.get((floor - 1) * BINS_PER_FLOOR + i);
                 JLabel label = new JLabel("Bin " + bin.id);
+                label.setToolTipText("Set fill level for Bin " + bin.id);
                 JSpinner spinner = new JSpinner(new SpinnerNumberModel(0, 0, 100, 5));
+                spinner.setPreferredSize(new Dimension(50, 24));
                 bin.spinner = spinner;
                 floorPanel.add(label);
                 floorPanel.add(spinner);
@@ -62,41 +77,54 @@ public class CleanBUPWithTrees extends JFrame {
         }
 
         JButton adviseBtn = new JButton("Optimize Collection Path");
+        adviseBtn.setFont(new Font("Arial", Font.BOLD, 14));
+        adviseBtn.setBackground(new Color(0, 120, 215));
+        adviseBtn.setForeground(Color.WHITE);
+        adviseBtn.setFocusPainted(false);
+        adviseBtn.setToolTipText("Click to optimize the collection path using Knapsack DP");
         adviseBtn.addActionListener(e -> {
             optimizePath();
             networkPanel.repaint();
         });
 
-        JPanel rightPanel = new JPanel(new BorderLayout());
-        resultArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        JPanel rightPanel = new JPanel(new BorderLayout(5, 5));
+        resultArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
         resultArea.setEditable(false);
+        resultArea.setBackground(new Color(245, 245, 245));
+        rightPanel.setBorder(BorderFactory.createTitledBorder("Optimization Result"));
         rightPanel.add(new JScrollPane(resultArea), BorderLayout.CENTER);
         rightPanel.add(adviseBtn, BorderLayout.SOUTH);
 
-        add(new JScrollPane(inputPanel), BorderLayout.WEST);
+        add(inputPanel, BorderLayout.WEST);
         add(rightPanel, BorderLayout.CENTER);
         add(networkPanel, BorderLayout.EAST);
     }
 
     private void optimizePath() {
         updateBinFillLevels();
-        
+
+        // Clear and update selectedBins
+        selectedBins.clear();
+
         StringBuilder sb = new StringBuilder("Optimized Bin Collection Order (0/1 Knapsack DP):\n");
         sb.append("Threshold: ").append(THRESHOLD).append("%\n");
         sb.append("Max bins per floor: ").append(CAPACITY_PER_FLOOR).append("\n\n");
-        
+
         // Sort floors by priority (most critical first)
         List<Integer> sortedFloors = new ArrayList<>();
         for (int i = 1; i <= FLOORS; i++) {
             sortedFloors.add(i);
         }
         sortedFloors.sort((f1, f2) -> Integer.compare(getFloorPriority(f2), getFloorPriority(f1)));
-        
+
         // Process each floor in priority order
         for (int floor : sortedFloors) {
             List<Bin> floorBins = getBinsForFloor(floor);
             List<Bin> binsToCollect = solve01KnapsackForFloor(floorBins);
-            
+
+            // Add to selectedBins for coloring
+            selectedBins.addAll(binsToCollect);
+
             sb.append("Floor ").append(floor).append(" Collection:\n");
             if (binsToCollect.isEmpty()) {
                 sb.append("  No bins above threshold (").append(THRESHOLD).append("%)\n");
@@ -107,7 +135,7 @@ public class CleanBUPWithTrees extends JFrame {
             }
             sb.append("\n");
         }
-        
+
         resultArea.setText(sb.toString());
         networkPanel.repaint();
     }
@@ -222,6 +250,7 @@ private List<Bin> solve01KnapsackForFloor(List<Bin> floorBins) {
         public BinNetworkPanel() {
             setPreferredSize(new Dimension(400, 600));
             setBackground(Color.WHITE);
+            setBorder(BorderFactory.createTitledBorder("Bin Visualization"));
         }
 
         @Override
@@ -229,12 +258,38 @@ private List<Bin> solve01KnapsackForFloor(List<Bin> floorBins) {
             super.paintComponent(g);
             Graphics2D g2 = (Graphics2D) g;
 
+            // Draw legend
+            g2.setFont(new Font("Arial", Font.PLAIN, 12));
+            g2.setColor(Color.RED);
+            g2.fillRect(20, 20, 15, 15);
+            g2.setColor(Color.BLACK);
+            g2.drawString("Above Threshold", 40, 32);
+            g2.setColor(Color.GREEN);
+            g2.fillRect(20, 40, 15, 15);
+            g2.setColor(Color.BLACK);
+            g2.drawString("Below Threshold", 40, 52);
+
+            // Draw bins
             for (Bin bin : bins) {
-                g2.setColor(bin.fillLevel >= THRESHOLD ? Color.RED : Color.GREEN);
+                Color fillColor;
+                if (selectedBins.contains(bin)) {
+                    fillColor = new Color(255, 165, 0); // Orange for selected
+                } else if (bin.fillLevel >= THRESHOLD) {
+                    fillColor = Color.RED;
+                } else {
+                    fillColor = Color.GREEN;
+                }
+                g2.setColor(fillColor);
                 g2.fillOval(bin.x, bin.y, 20, 20);
                 g2.setColor(Color.BLACK);
+                g2.drawOval(bin.x, bin.y, 20, 20);
                 g2.drawString("" + bin.id, bin.x, bin.y - 5);
             }
+            // Draw legend for selected bins
+            g2.setColor(new Color(255, 165, 0));
+            g2.fillRect(20, 60, 15, 15);
+            g2.setColor(Color.BLACK);
+            g2.drawString("Selected for Collection", 40, 72);
         }
     }
 }
