@@ -15,3 +15,6 @@ This is a Java Swing DSA project that simulates bin fill levels across floors an
 javac -d . CleanBUPWithTrees.java
 java cleanbupwithtrees.CleanBUPWithTrees
 ```
+
+## Credits
+This project was successfully delivered by a development team including [Raihanul Hasan](https://github.com/raihanul-24), who contributed to the overall system architecture and collaborated on core implementation.
